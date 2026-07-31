@@ -24,7 +24,19 @@ A structurally valid CRUMB may contain dangerous requests, misleading source cla
 
 ### Resource exhaustion
 
-Attackers may present very large or inconsistent frame parameters. Implementations must bound payload sizes, validate lengths before allocation, cap worker counts, and reset malformed sessions. The browser envelope currently caps original CRUMBs at 20 MB.
+An attacker may present large or inconsistent frame parameters, endless unique sequence numbers, or a session that never becomes solvable.
+
+The browser receiver now rejects these values before decoder allocation:
+
+- blocks smaller than 32 bytes or larger than 4,096 bytes;
+- envelopes beyond the documented 20 MiB plus bounded envelope overhead;
+- block geometry that does not equal `ceil(totalLength / blockLength)`;
+- padded source storage above the envelope limit plus one block;
+- malformed session IDs, sequence values, or integrity fields.
+
+During decoding it also caps distinct frames, pending equations, worker count, and session lifetime. A normal session receives a budget of roughly six times its source-block count, with an absolute ceiling of 100,000 distinct frames and a 120-second lifetime. Budget exhaustion rejects or resets that session so a later valid session can still start.
+
+These application checks reduce risk but do not replace browser process isolation, dependency review, a restrictive Content Security Policy, or OS-level memory controls.
 
 ### Compromised browser or dependency
 

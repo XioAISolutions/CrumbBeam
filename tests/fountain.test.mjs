@@ -30,3 +30,14 @@ test("duplicate frames are ignored", () => {
   assert.equal(decoder.framesNew, 1);
   assert.equal(decoder.framesDuplicate, 1);
 });
+
+test("distinct-frame budget prevents unbounded seen-set growth", () => {
+  const payload = deterministicPayload(4096);
+  const encoder = new LTEncoder(payload, 256, 101);
+  const decoder = new LTDecoder(encoder.blockCount, 256, 101, payload.length);
+  decoder.maxFrames = 1;
+  assert.equal(decoder.addFrame(0, encoder.encode(0)), true);
+  assert.equal(decoder.addFrame(1, encoder.encode(1)), false);
+  assert.equal(decoder.seen.size, 1);
+  assert.equal(decoder.framesRejected, 1);
+});

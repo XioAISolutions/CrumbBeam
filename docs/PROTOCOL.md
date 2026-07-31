@@ -80,12 +80,37 @@ The encoder uses a robust-soliton degree distribution. The receiver applies a pe
 
 Sender and receiver must generate bit-identical degree distributions. The implementation therefore uses a deterministic natural-log approximation made from specified IEEE-754 operations instead of JavaScript `Math.log`, whose last bits can differ across engines.
 
-## 5. Compatibility rules
+## 5. Receiver resource limits
+
+Frame fields are untrusted until they pass all checks below. Version 1 implementations use these bounds before constructing an LT decoder:
+
+| Limit | Value |
+|---|---:|
+| minimum fountain block | 32 bytes |
+| maximum fountain block | 4,096 bytes |
+| maximum CBM1 envelope | 20 MiB + 256 KiB overhead allowance |
+| maximum source blocks | 65,535 |
+| maximum padded allocation | envelope limit + one maximum block |
+| maximum distinct frames per session | 100,000, further reduced to roughly `K × 6` for normal sessions |
+| maximum receive-session lifetime | 120 seconds |
+
+The geometry must also be internally exact:
+
+```text
+(blockCount - 1) × blockLength < totalLength ≤ blockCount × blockLength
+```
+
+This proves that `blockCount` is exactly `ceil(totalLength / blockLength)` and prevents a frame from advertising a small payload with an enormous padded allocation. Products are checked with safe-integer arithmetic before allocation.
+
+The LT decoder separately caps retained pending equations. Reaching a frame, pending-equation, or session-time budget rejects or resets that session; it never weakens envelope verification.
+
+## 6. Compatibility rules
 
 - Unknown envelope versions must be rejected.
 - Unknown optical frame versions must be ignored.
 - Invalid length combinations must be rejected before allocation.
 - A receiver must not combine frames from different session IDs.
 - A receiver must reset on incompatible parameters within one session.
+- A receiver must impose documented memory and session-lifetime limits.
 - Metadata must be treated as untrusted informational text.
 - A verified CRUMB remains untrusted application input.

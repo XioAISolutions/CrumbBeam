@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#080b12" />
+    <meta name="description" content="Beam verified CRUMB AI context between offline devices using only a screen and camera." />
+    <title>CrumbBeam — AI context through light</title>
+  </head>
+  <body>
+    <main class="shell">
+      <header class="hero">
+        <div class="eyebrow">CRUMB optical transport</div>
+        <h1>Beam AI context<br /><span>using only light.</span></h1>
+        <p>Move a verified CRUMB handoff between offline devices with animated, fountain-coded QR frames. No account, pairing, cloud, Wi-Fi, or Bluetooth.</p>
+        <div class="proof-row"><span>✓ CRUMB validated</span><span>✓ SHA-256 verified</span><span>✓ Optional AES-GCM</span></div>
+      </header>
+      <nav class="mode-switch" aria-label="Choose transfer mode">
+        <button class="mode-button active" data-mode="send">Send a CRUMB</button>
+        <button class="mode-button" data-mode="receive">Receive with camera</button>
+      </nav>
+      <section id="send-panel" class="panel active" aria-labelledby="send-title">
+        <div class="panel-heading"><div><div class="step">01 / PREPARE</div><h2 id="send-title">Choose the AI handoff</h2></div><button id="load-demo" class="text-button">Load demo CRUMB</button></div>
+        <div class="input-grid">
+          <label class="file-drop"><input id="crumb-file" type="file" accept=".crumb,text/plain" /><strong>Drop or choose a .crumb file</strong><small>The file stays in this browser.</small></label>
+          <div class="or">or</div>
+          <label class="text-label"><span>Paste CRUMB text</span><textarea id="crumb-text" spellcheck="false" placeholder="BEGIN CRUMB&#10;v=1.4&#10;kind=task&#10;..."></textarea></label>
+        </div>
+        <div id="crumb-inspection" class="inspection idle">Waiting for a CRUMB.</div>
+        <details class="settings"><summary>Transport settings</summary><div class="settings-grid">
+          <label>Optional passphrase<input id="send-passphrase" type="password" autocomplete="new-password" placeholder="Encrypt before beaming" /></label>
+          <label>Frame rate<select id="send-fps"><option value="12">12 FPS — most reliable</option><option value="18">18 FPS — balanced</option><option value="24" selected>24 FPS — fast</option></select></label>
+          <label>QR payload<select id="send-frame-bytes"><option value="700">700 bytes — distant camera</option><option value="1000" selected>1000 bytes — balanced</option><option value="1400">1400 bytes — close range</option></select></label>
+        </div></details>
+        <div class="actions"><button id="start-send" class="primary" disabled>Beam this CRUMB</button><button id="stop-send" class="secondary" hidden>Stop</button></div>
+        <section id="beam-stage" class="beam-stage" hidden><div class="beam-copy"><div class="step">02 / TRANSMIT</div><h3>Point the receiving camera at this code</h3><p>Hold both devices steady. Missed frames are automatically tolerated.</p><div id="send-stats" class="mono-stats"></div></div><div class="qr-wrap"><canvas id="qr-canvas"></canvas></div></section>
+      </section>
+      <section id="receive-panel" class="panel" aria-labelledby="receive-title">
+        <div class="panel-heading"><div><div class="step">01 / CAPTURE</div><h2 id="receive-title">Receive a beam</h2></div></div>
+        <div class="receive-intro">
+          <p>Camera processing happens locally. Frames may arrive in any order; the fountain decoder reconstructs the envelope once enough unique frames have been seen.</p>
+          <label>Passphrase, when sender encrypted the beam<input id="receive-passphrase" type="password" autocomplete="current-password" placeholder="Leave blank for unencrypted beams" /></label>
+          <div class="actions">
+            <button id="start-receive" class="primary">Start camera</button>
+            <button id="retry-verification" class="primary" hidden>Retry verification</button>
+            <button id="discard-envelope" class="secondary" hidden>Discard retained envelope</button>
+            <button id="stop-receive" class="secondary" hidden>Stop camera</button>
+          </div>
+        </div>
+        <div id="camera-stage" class="camera-stage" hidden><video id="camera-video" playsinline muted></video><div class="scan-corners" aria-hidden="true"></div><div class="camera-overlay"><div id="receive-status">Searching for CrumbBeam frames…</div><div class="progress-track"><div id="receive-progress"></div></div><div id="receive-metrics" class="mono-stats"></div></div></div>
+        <section id="receive-result" class="result" hidden><div class="verified">VERIFIED HANDOFF</div><h3 id="result-title"></h3><div id="result-meta" class="result-meta"></div><pre id="result-text"></pre><div class="actions"><button id="copy-result" class="primary">Copy CRUMB</button><button id="download-result" class="secondary">Download .crumb</button></div></section>
+      </section>
+      <footer><span>CRUMB defines the message.</span><span>CrumbBeam delivers it.</span></footer>
+    </main>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

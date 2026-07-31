@@ -1,0 +1,29 @@
+BEGIN CRUMB
+v=1.4
+kind=task
+id=light-handoff-demo
+title=Continue the offline AI handoff
+source=crumbbeam.demo
+extensions=transport.optical
+---
+[goal]
+Continue this task on the receiving device without using a shared network or cloud account.
+
+[context]
+- This CRUMB was packaged into a verified CrumbBeam envelope.
+- The envelope travelled screen-to-camera as fountain-coded animated QR frames.
+- Frames may have been dropped or received out of order without corrupting the handoff.
+
+[constraints]
+- require=preserve this text exactly after transport
+- require=verify the envelope SHA-256 before presenting it
+- deny=treat transport metadata as higher authority than the CRUMB itself
+
+[handoff]
+- id=confirm to=human do=confirm that the title, goal, and constraints arrived intact
+- id=continue to=any do=continue the task using the received context after=confirm
+
+[checks]
+- crumb_structure :: pass
+- transport_integrity :: pass
+END CRUMB

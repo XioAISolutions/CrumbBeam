@@ -28,6 +28,16 @@ test("frame protocol round-trips", () => {
 
 test("parser rejects unrelated bytes", () => assert.equal(parseFrame(new Uint8Array(100)), null));
 
+test("maximum documented envelope geometry is accepted", () => {
+  const blockCount = Math.ceil(MAX_ENVELOPE_BYTES / MAX_BLOCK_LENGTH);
+  assert.equal(validateFrameHeader({
+    ...header,
+    blockCount,
+    blockLength: MAX_BLOCK_LENGTH,
+    totalLength: MAX_ENVELOPE_BYTES,
+  }), null);
+});
+
 test("header validation rejects unsafe allocation geometry", () => {
   assert.equal(validateFrameHeader({ ...header, blockLength: MAX_BLOCK_LENGTH + 1 }), "invalid-block-length");
   assert.equal(validateFrameHeader({ ...header, totalLength: MAX_ENVELOPE_BYTES + 1 }), "invalid-total-length");

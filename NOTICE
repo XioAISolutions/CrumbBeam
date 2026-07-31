@@ -1,0 +1,30 @@
+CrumbBeam
+Copyright (c) 2026 XIO AI Solutions
+
+Optical transport attribution
+-----------------------------
+
+CrumbBeam's LT fountain-code implementation and browser optical transport are
+informed by the MIT-licensed project:
+
+  Decimen Optical Transfer
+  https://github.com/bashalarmistalt/decimen-optical-transfer
+  Copyright held by its respective author(s)
+
+Concepts and implementation lessons adapted or independently reimplemented for
+CrumbBeam include:
+
+- self-describing one-way screen-to-camera frames;
+- deterministic robust-soliton LT frame selection;
+- avoiding JavaScript Math.log divergence across browser engines;
+- worker-based ZXing-WASM QR decoding;
+- dropping frames while workers are busy;
+- tracking received frames rather than solved blocks for progress;
+- requiring a secure browser context for camera capture;
+- demanding exact camera frame rate before falling back to ideal constraints.
+
+CrumbBeam's CRUMB-specific envelope, validation, transport metadata,
+authenticated encryption, SHA-256 verification, user interface, documentation,
+and integration model are original to this repository.
+
+This NOTICE does not replace the license terms of either project.

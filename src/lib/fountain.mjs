@@ -2,7 +2,14 @@
 // The robust-soliton design and deterministic-log workaround are informed by
 // bashalarmistalt/decimen-optical-transfer (MIT); see NOTICE and docs/PROTOCOL.md.
 
-import { splitmix32 } from "./protocol.mjs";
+import {
+  MAX_BLOCK_COUNT,
+  MAX_ENVELOPE_BYTES,
+  MAX_SESSION_FRAMES,
+  MIN_BLOCK_LENGTH,
+  MAX_BLOCK_LENGTH,
+  splitmix32,
+} from "./protocol.mjs";
 
 const LN2 = 0.6931471805599453;
 const SOLITON_C = 0.1;
@@ -77,13 +84,25 @@ function xorInto(target, source) {
   for (let i = 0; i < target.length; i++) target[i] = (target[i] ^ source[i]) >>> 0;
 }
 
+function validateGeometry(blockCount, blockLength, totalLength) {
+  if (!Number.isInteger(blockCount) || blockCount < 1 || blockCount > MAX_BLOCK_COUNT) throw new Error("invalid blockCount");
+  if (!Number.isInteger(blockLength) || blockLength < MIN_BLOCK_LENGTH || blockLength > MAX_BLOCK_LENGTH) throw new Error("invalid blockLength");
+  if (!Number.isInteger(totalLength) || totalLength < 1 || totalLength > MAX_ENVELOPE_BYTES) throw new Error("invalid totalLength");
+  const paddedLength = blockCount * blockLength;
+  if (!Number.isSafeInteger(paddedLength) || totalLength > paddedLength || totalLength <= (blockCount - 1) * blockLength) {
+    throw new Error("inconsistent fountain geometry");
+  }
+}
+
 export class LTEncoder {
   constructor(payload, blockLength, sessionId) {
     if (!(payload instanceof Uint8Array)) payload = new Uint8Array(payload);
-    if (blockLength < 32 || blockLength > 4096) throw new Error("blockLength must be 32..4096 bytes");
+    if (payload.byteLength < 1 || payload.byteLength > MAX_ENVELOPE_BYTES) throw new Error("payload exceeds optical envelope limit");
+    const blockCount = Math.max(1, Math.ceil(payload.byteLength / blockLength));
+    validateGeometry(blockCount, blockLength, payload.byteLength);
     this.blockLength = blockLength;
     this.sessionId = sessionId >>> 0;
-    this.blockCount = Math.max(1, Math.ceil(payload.byteLength / blockLength));
+    this.blockCount = blockCount;
     this.words = Math.ceil(blockLength / 4);
     this.blocks = new Uint32Array(this.blockCount * this.words);
     const bytes = new Uint8Array(this.blocks.buffer);
@@ -107,6 +126,7 @@ export class LTEncoder {
 
 export class LTDecoder {
   constructor(blockCount, blockLength, sessionId, totalLength) {
+    validateGeometry(blockCount, blockLength, totalLength);
     this.blockCount = blockCount;
     this.blockLength = blockLength;
     this.sessionId = sessionId >>> 0;
@@ -120,34 +140,44 @@ export class LTDecoder {
     this.solvedCount = 0;
     this.framesNew = 0;
     this.framesDuplicate = 0;
+    this.framesRejected = 0;
+    this.maxFrames = Math.min(MAX_SESSION_FRAMES, Math.max(blockCount * 6, blockCount + 64));
+    this.maxPending = Math.min(50_000, Math.max(blockCount * 3, 128));
   }
 
   get isComplete() { return this.solvedCount === this.blockCount; }
 
   addFrame(sequence, block) {
-    if (this.seen.has(sequence)) { this.framesDuplicate++; return; }
+    if (!Number.isInteger(sequence) || sequence < 0 || sequence > 0xffffffff) { this.framesRejected++; return false; }
+    if (!(block instanceof Uint8Array) || block.byteLength !== this.blockLength) { this.framesRejected++; return false; }
+    if (this.seen.has(sequence)) { this.framesDuplicate++; return true; }
+    if (this.seen.size >= this.maxFrames) { this.framesRejected++; return false; }
     this.seen.add(sequence);
     this.framesNew++;
-    if (this.isComplete) return;
+    if (this.isComplete) return true;
+
     const indices = new Set(frameIndices(this.blockCount, this.cdf, this.sessionId, sequence));
     const words = new Uint32Array(this.words);
-    new Uint8Array(words.buffer).set(block.slice(0, this.blockLength));
+    new Uint8Array(words.buffer).set(block);
     for (const index of [...indices]) {
       const solved = this.solved[index];
       if (solved) { xorInto(words, solved); indices.delete(index); }
     }
-    if (indices.size === 0) return;
-    if (indices.size === 1) { this.#resolve(indices.values().next().value, words); return; }
-    this.#addPending({ indices, words });
+    if (indices.size === 0) return true;
+    if (indices.size === 1) { this.#resolve(indices.values().next().value, words); return true; }
+    if (!this.#addPending({ indices, words })) { this.framesRejected++; return false; }
+    return true;
   }
 
   #addPending(frame) {
+    if (this.pending.size >= this.maxPending) return false;
     this.pending.add(frame);
     for (const index of frame.indices) {
       let waiting = this.byBlock.get(index);
       if (!waiting) { waiting = new Set(); this.byBlock.set(index, waiting); }
       waiting.add(frame);
     }
+    return true;
   }
 
   #removePending(frame) {
@@ -175,7 +205,7 @@ export class LTDecoder {
         frame.indices.delete(index);
         if (frame.indices.size === 0) continue;
         if (frame.indices.size === 1) queue.push([frame.indices.values().next().value, frame.words]);
-        else this.#addPending(frame);
+        else if (!this.#addPending(frame)) this.framesRejected++;
       }
     }
   }

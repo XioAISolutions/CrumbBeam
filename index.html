@@ -37,7 +37,16 @@
       </section>
       <section id="receive-panel" class="panel" aria-labelledby="receive-title">
         <div class="panel-heading"><div><div class="step">01 / CAPTURE</div><h2 id="receive-title">Receive a beam</h2></div></div>
-        <div class="receive-intro"><p>Camera processing happens locally. Frames may arrive in any order; the fountain decoder reconstructs the envelope once enough unique frames have been seen.</p><label>Passphrase, when sender encrypted the beam<input id="receive-passphrase" type="password" autocomplete="current-password" placeholder="Leave blank for unencrypted beams" /></label><button id="start-receive" class="primary">Start camera</button><button id="stop-receive" class="secondary" hidden>Stop camera</button></div>
+        <div class="receive-intro">
+          <p>Camera processing happens locally. Frames may arrive in any order; the fountain decoder reconstructs the envelope once enough unique frames have been seen.</p>
+          <label>Passphrase, when sender encrypted the beam<input id="receive-passphrase" type="password" autocomplete="current-password" placeholder="Leave blank for unencrypted beams" /></label>
+          <div class="actions">
+            <button id="start-receive" class="primary">Start camera</button>
+            <button id="retry-verification" class="primary" hidden>Retry verification</button>
+            <button id="discard-envelope" class="secondary" hidden>Discard retained envelope</button>
+            <button id="stop-receive" class="secondary" hidden>Stop camera</button>
+          </div>
+        </div>
         <div id="camera-stage" class="camera-stage" hidden><video id="camera-video" playsinline muted></video><div class="scan-corners" aria-hidden="true"></div><div class="camera-overlay"><div id="receive-status">Searching for CrumbBeam frames…</div><div class="progress-track"><div id="receive-progress"></div></div><div id="receive-metrics" class="mono-stats"></div></div></div>
         <section id="receive-result" class="result" hidden><div class="verified">VERIFIED HANDOFF</div><h3 id="result-title"></h3><div id="result-meta" class="result-meta"></div><pre id="result-text"></pre><div class="actions"><button id="copy-result" class="primary">Copy CRUMB</button><button id="download-result" class="secondary">Download .crumb</button></div></section>
       </section>

@@ -2,6 +2,7 @@ import QRCode from "qrcode";
 import "./styles.css";
 import { inspectCrumb } from "./lib/crumb.mjs";
 import { packCrumbEnvelope, unpackCrumbEnvelope } from "./lib/envelope.mjs";
+import { VolatileEnvelope } from "./lib/retained-envelope.mjs";
 import { BeamReceiver, BeamSender } from "./lib/transport.mjs";
 
 const $ = (id) => document.getElementById(id);
@@ -142,7 +143,7 @@ async function runQrStream(sender, fps, generation) {
     context.imageSmoothingEnabled = false;
     context.drawImage(staging, 0, 0, qrCanvas.width, qrCanvas.height);
     const stats = sender.stats;
-    sendStats.textContent = [`SESSION ${stats.sessionId.toString(16).padStart(8, "0")} · FRAME ${stats.sequence}`, `${fps} FPS · QR V${version} · ${stats.blockLength} B/block · K=${stats.blockCount}`, `${(stats.totalLength / 1024).toFixed(1)} KB encrypted envelope`].join("\n");
+    sendStats.textContent = [`SESSION ${stats.sessionId.toString(16).padStart(8, "0")} · FRAME ${stats.sequence}`, `${fps} FPS · QR V${version} · ${stats.blockLength} B/block · K=${stats.blockCount}`, `${(stats.totalLength / 1024).toFixed(1)} KB envelope`].join("\n");
     nextAt += interval;
     if (now - nextAt > interval * 3) nextAt = now + interval;
   };
@@ -151,6 +152,8 @@ async function runQrStream(sender, fps, generation) {
 }
 
 const startReceive = $("start-receive");
+const retryVerification = $("retry-verification");
+const discardEnvelope = $("discard-envelope");
 const stopReceive = $("stop-receive");
 const cameraStage = $("camera-stage");
 const video = $("camera-video");
@@ -158,17 +161,39 @@ const receiveStatus = $("receive-status");
 const progress = $("receive-progress");
 const metrics = $("receive-metrics");
 const receiver = new BeamReceiver();
+const retainedEnvelope = new VolatileEnvelope();
 let captureGeneration = 0;
 let mediaStream = null;
 let workers = [];
 let busy = [];
 let receivedText = null;
 let receivedFilename = "received.crumb";
+let verificationInFlight = false;
+let lastVerificationAttempt = 0;
 
-startReceive.addEventListener("click", () => startCamera());
+startReceive.addEventListener("click", startCamera);
+retryVerification.addEventListener("click", verifyRetainedEnvelope);
+discardEnvelope.addEventListener("click", () => discardRetainedEnvelope("Retained envelope discarded. Ready to scan again."));
 stopReceive.addEventListener("click", stopCamera);
+$("receive-passphrase").addEventListener("keydown", (event) => {
+  if (event.key === "Enter" && retainedEnvelope.hasValue) verifyRetainedEnvelope();
+});
+window.addEventListener("pagehide", () => retainedEnvelope.discard());
+
+function setRetainedEnvelopeControls(hasEnvelope) {
+  retryVerification.hidden = !hasEnvelope;
+  discardEnvelope.hidden = !hasEnvelope;
+  startReceive.hidden = hasEnvelope;
+}
+
+function discardRetainedEnvelope(message = null) {
+  retainedEnvelope.discard();
+  setRetainedEnvelopeControls(false);
+  if (message) receiveStatus.textContent = message;
+}
 
 async function startCamera() {
+  discardRetainedEnvelope();
   if (!navigator.mediaDevices?.getUserMedia) {
     receiveStatus.textContent = "Camera requires HTTPS. Open the secure Vite network URL.";
     cameraStage.hidden = false;
@@ -213,7 +238,7 @@ function stopCamera() {
   workers = [];
   busy = [];
   video.srcObject = null;
-  startReceive.hidden = false;
+  if (!retainedEnvelope.hasValue) startReceive.hidden = false;
   stopReceive.hidden = true;
 }
 
@@ -249,11 +274,28 @@ async function onQrDecoded(bytes) {
   const pct = state.complete ? 100 : Math.max(1, Math.round(state.progress * 100));
   progress.style.width = `${pct}%`;
   receiveStatus.textContent = state.complete ? "Envelope reconstructed. Verifying…" : `Receiving session · ${pct}% estimated`;
-  metrics.textContent = `unique ${state.framesNew} · duplicates ${state.framesDuplicate} · solved ${state.solvedCount}/${state.blockCount}`;
+  metrics.textContent = `unique ${state.framesNew} · duplicates ${state.framesDuplicate} · rejected ${state.framesRejected || 0} · solved ${state.solvedCount}/${state.blockCount}`;
   if (!state.complete) return;
+  retainedEnvelope.retain(state.payload);
+  setRetainedEnvelopeControls(true);
   stopCamera();
+  await verifyRetainedEnvelope();
+}
+
+async function verifyRetainedEnvelope() {
+  const envelope = retainedEnvelope.peek();
+  if (!envelope || verificationInFlight) return;
+  const now = Date.now();
+  if (now - lastVerificationAttempt < 750) {
+    receiveStatus.textContent = "Please wait a moment before retrying verification.";
+    return;
+  }
+  lastVerificationAttempt = now;
+  verificationInFlight = true;
+  retryVerification.disabled = true;
+  receiveStatus.textContent = "Verifying retained envelope…";
   try {
-    const result = await unpackCrumbEnvelope(state.payload, { passphrase: $("receive-passphrase").value || undefined });
+    const result = await unpackCrumbEnvelope(envelope, { passphrase: $("receive-passphrase").value || undefined });
     receivedText = result.text;
     receivedFilename = result.metadata.filename || "received.crumb";
     $("result-title").textContent = result.crumb.title;
@@ -261,10 +303,23 @@ async function onQrDecoded(bytes) {
     $("result-text").textContent = result.text;
     $("receive-result").hidden = false;
     receiveStatus.textContent = "Transfer complete and verified.";
+    discardRetainedEnvelope();
   } catch (error) {
-    receiveStatus.textContent = `VERIFY ERROR · ${error instanceof Error ? error.message : String(error)}`;
-    startReceive.hidden = false;
+    const message = error instanceof Error ? error.message : String(error);
+    receiveStatus.textContent = friendlyVerificationError(message);
+    setRetainedEnvelopeControls(true);
+    $("receive-passphrase").focus();
+  } finally {
+    verificationInFlight = false;
+    retryVerification.disabled = false;
   }
+}
+
+function friendlyVerificationError(message) {
+  if (/enter its passphrase/i.test(message)) return "Passphrase required. Enter it and retry verification—no rescan needed.";
+  if (/could not decrypt/i.test(message)) return "Authentication failed. Check the passphrase and retry—no rescan needed.";
+  if (/sha-256|length|invalid crumb|decompress/i.test(message)) return "Payload verification failed. Discard this envelope and scan a fresh beam.";
+  return `VERIFY ERROR · ${message}`;
 }
 
 $("copy-result").addEventListener("click", async () => {
